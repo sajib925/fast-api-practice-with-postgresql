@@ -21,4 +21,15 @@ class UserPydantic(BaseModel):
     lastname: str
     password: str
     is_active: bool
-    role: str
+    phone_number: str
+
+class UserPydanticUpdate(BaseModel):
+    email: Optional[str] = Field(default=None)
+    username: Optional[str] = Field(default=None)
+    firstname: Optional[str] = Field(default=None)
+    lastname: Optional[str] = Field(default=None)
+    phone_number: Optional[str] = Field(default=None)
+
+class UserPydanticPasswordUpdate(BaseModel):
+    current_pasword: str 
+    new_pasword: str

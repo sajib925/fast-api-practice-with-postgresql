@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Annotated
-from pydantic_todos import UserPydantic
+from pydantic_todos import UserPydantic, UserPydanticUpdate, UserPydanticPasswordUpdate
 from models import Users
 from passlib.context import CryptContext
 from database import SessionLocal
@@ -25,6 +25,7 @@ def get_db():
         db.close()
 
 db_dependency = Annotated[Session, Depends(get_db)]
+
 
 def authenticate_user(username, password, db):
     user = db.query(Users).filter(Users.username == username).first()
@@ -58,6 +59,8 @@ def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
 
     except:
         raise HTTPException(status_code=404, detail="User not found")
+    
+user_dependency = Annotated[dict, Depends(get_current_user)]
 
 @router.post("/create-user")
 def create_user(db: db_dependency, new_user: UserPydantic):
@@ -68,7 +71,8 @@ def create_user(db: db_dependency, new_user: UserPydantic):
         lastname = new_user.lastname,
         hash_password = bcrypt_context.hash(new_user.password),
         is_active = True,
-        role = new_user.role
+        role = new_user.role,
+        phone_number = new_user.phone_number
     )
 
     db.add(user_model)
@@ -81,9 +85,49 @@ def login_user(db: db_dependency, form_data: Annotated[OAuth2PasswordRequestForm
     user = authenticate_user(form_data.username, form_data.password, db)
 
     if not user:
-        return "Failed Authentication"
+        raise HTTPException(status_code=401, detail="Authentication Failed")
     
     token = create_access_token(user.username, user.id, user.role, timedelta(minutes=30))
     return token
     
+@router.get("/user")
+def get_user(user: user_dependency, db: db_dependency):
+    if user is None:
+        raise HTTPException(status_code=401, detail="Your are not authenticated")
+    return db.query(Users).filter(Users.id == user.get('id')).first()
+
+
+@router.put("/update-user")
+def update_user(user: user_dependency, db: db_dependency, update_user: UserPydanticUpdate):
+    if user is None:
+        raise HTTPException(status_code=401, detail="You are not authenticated")
+
+    user = db.query(Users).filter(Users.id == user.get('id')).first()
+
+    update_data = update_user.model_dump(exclude_unset=True)
+
+    for key, value in update_data.items():
+        setattr(user, key, value)
+
+    db.commit()
+
+    return JSONResponse(status_code=200, content={'message': 'User updated successfully'})
+
+@router.put("/update-password")
+def update_user_password(user: user_dependency, db: db_dependency, update_password: UserPydanticPasswordUpdate):
+    if user is None:
+        raise HTTPException(status_code=401, detail="You are not authenticated")
+
+    user = db.query(Users).filter(Users.id == user.get('id')).first()
+
+    if not bcrypt_context.verify(update_password.current_pasword, user.hash_password):
+        raise HTTPException(status_code=401, detail="Wrong Password")
+
+    user.hash_password = bcrypt_context.hash(update_password.new_pasword)
+
+    db.add(user)
+
+    db.commit()
+
+    return JSONResponse(status_code=200, content={'message': 'Password Changed Successfully'})
 
