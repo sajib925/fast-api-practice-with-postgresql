@@ -20,6 +20,7 @@ class UserPydantic(BaseModel):
     firstname: str
     lastname: str
     password: str
+    role: str
     phone_number: str
 
 class UserPydanticUpdate(BaseModel):
